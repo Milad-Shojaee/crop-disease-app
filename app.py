@@ -7,11 +7,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 from torchvision import transforms
+from torchvision.models import vit_b_16
 from PIL import Image
 
 
-MODEL_PATH = "crop_disease_resnet18.pth"
-MODEL_URL = "https://huggingface.co/Miladdeploy1368/crop-disease-classifier/resolve/main/crop_disease_resnet18.pth"
+RESNET_MODEL_PATH = "crop_disease_resnet18.pth"
+RESNET_MODEL_URL = "https://huggingface.co/Miladdeploy1368/crop-disease-classifier/resolve/main/crop_disease_resnet18.pth"
+
+VIT_MODEL_PATH = "crop_disease_vit_b16.pth"
+VIT_MODEL_URL = "https://huggingface.co/Miladdeploy1368/crop-disease-classifier/resolve/main/crop_disease_vit_b16.pth"
 
 CLASS_NAMES = [
     "Pepper__bell___Bacterial_spot",
@@ -52,10 +56,14 @@ def clean_label(label):
     return plant, disease
 
 
+def download_model(model_path, model_url):
+    if not os.path.exists(model_path):
+        urllib.request.urlretrieve(model_url, model_path)
+
+
 @st.cache_resource
-def load_model():
-    if not os.path.exists(MODEL_PATH):
-        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+def load_resnet_model():
+    download_model(RESNET_MODEL_PATH, RESNET_MODEL_URL)
 
     model = models.resnet18(weights=None)
     num_features = model.fc.in_features
@@ -63,7 +71,7 @@ def load_model():
 
     model.load_state_dict(
         torch.load(
-            MODEL_PATH,
+            RESNET_MODEL_PATH,
             map_location=torch.device("cpu")
         )
     )
@@ -72,7 +80,54 @@ def load_model():
     return model
 
 
-model = load_model()
+@st.cache_resource
+def load_vit_model():
+    download_model(VIT_MODEL_PATH, VIT_MODEL_URL)
+
+    model = vit_b_16(weights=None)
+    model.heads.head = nn.Linear(
+        in_features=768,
+        out_features=len(CLASS_NAMES)
+    )
+
+    model.load_state_dict(
+        torch.load(
+            VIT_MODEL_PATH,
+            map_location=torch.device("cpu")
+        )
+    )
+
+    model.eval()
+    return model
+
+
+def get_topk_predictions(model, image_tensor, k=3):
+    with torch.no_grad():
+        outputs = model(image_tensor)
+        probabilities = F.softmax(outputs, dim=1)
+        top_probs, top_indices = torch.topk(probabilities, k=k, dim=1)
+
+    results = []
+
+    for prob, idx in zip(top_probs[0], top_indices[0]):
+        label = CLASS_NAMES[idx.item()]
+        plant, disease = clean_label(label)
+        confidence = prob.item() * 100
+
+        results.append(
+            {
+                "label": label,
+                "plant": plant,
+                "disease": disease,
+                "confidence": confidence
+            }
+        )
+
+    return results
+
+
+resnet_model = load_resnet_model()
+vit_model = load_vit_model()
 
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -82,7 +137,8 @@ transform = transforms.Compose([
 st.title("🌿 Crop Disease Image Classifier")
 
 st.write(
-    "Upload a crop leaf image and the model will predict the most likely disease."
+    "Upload a crop leaf image and compare predictions from two deep learning models: "
+    "ResNet-18 and Vision Transformer ViT-B/16."
 )
 
 st.info("Supported plants: Tomato, Potato, and Pepper.")
@@ -104,39 +160,64 @@ if uploaded_file is not None:
     img_tensor = transform(image)
     img_tensor = img_tensor.unsqueeze(0)
 
-    with torch.no_grad():
-        outputs = model(img_tensor)
-        probabilities = F.softmax(outputs, dim=1)
-        top_probs, top_indices = torch.topk(probabilities, k=3, dim=1)
+    resnet_results = get_topk_predictions(
+        resnet_model,
+        img_tensor,
+        k=3
+    )
 
-    best_idx = top_indices[0][0].item()
-    best_prob = top_probs[0][0].item() * 100
+    vit_results = get_topk_predictions(
+        vit_model,
+        img_tensor,
+        k=3
+    )
 
-    best_label = CLASS_NAMES[best_idx]
-    plant, disease = clean_label(best_label)
+    resnet_best = resnet_results[0]
+    vit_best = vit_results[0]
 
     st.success("Prediction Complete")
 
-    st.subheader("Best Prediction")
-    st.write(f"**Predicted Plant:** {plant}")
-    st.write(f"**Predicted Disease:** {disease}")
-    st.write(f"**Confidence:** {best_prob:.2f}%")
+    st.subheader("Model Comparison")
 
-    if best_prob < 80:
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### ResNet-18")
+        st.write(f"**Predicted Plant:** {resnet_best['plant']}")
+        st.write(f"**Predicted Disease:** {resnet_best['disease']}")
+        st.write(f"**Confidence:** {resnet_best['confidence']:.2f}%")
+
+    with col2:
+        st.markdown("### ViT-B/16")
+        st.write(f"**Predicted Plant:** {vit_best['plant']}")
+        st.write(f"**Predicted Disease:** {vit_best['disease']}")
+        st.write(f"**Confidence:** {vit_best['confidence']:.2f}%")
+
+    if resnet_best["label"] == vit_best["label"]:
+        st.success("Both models agree on the same prediction.")
+    else:
+        st.warning("The two models disagree. Review the Top-3 predictions below.")
+
+    if resnet_best["confidence"] < 80 and vit_best["confidence"] < 80:
         st.warning(
-            "The model is not very confident. This image may belong to an unsupported plant "
+            "Both models have low confidence. This image may belong to an unsupported plant "
             "or disease class."
         )
 
-    st.subheader("Top-3 Predictions")
+    st.subheader("ResNet-18 Top-3 Predictions")
 
-    for prob, idx in zip(top_probs[0], top_indices[0]):
-        label = CLASS_NAMES[idx.item()]
-        plant_i, disease_i = clean_label(label)
-        confidence = prob.item() * 100
-
+    for result in resnet_results:
         st.write(
-            f"**Plant:** {plant_i} | "
-            f"**Disease:** {disease_i} | "
-            f"**Confidence:** {confidence:.2f}%"
+            f"**Plant:** {result['plant']} | "
+            f"**Disease:** {result['disease']} | "
+            f"**Confidence:** {result['confidence']:.2f}%"
+        )
+
+    st.subheader("ViT-B/16 Top-3 Predictions")
+
+    for result in vit_results:
+        st.write(
+            f"**Plant:** {result['plant']} | "
+            f"**Disease:** {result['disease']} | "
+            f"**Confidence:** {result['confidence']:.2f}%"
         )
