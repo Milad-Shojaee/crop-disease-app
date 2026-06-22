@@ -157,67 +157,72 @@ if uploaded_file is not None:
         use_container_width=True
     )
 
-    img_tensor = transform(image)
-    img_tensor = img_tensor.unsqueeze(0)
+    analyze_button = st.button("🔍 Analyze Image")
 
-    resnet_results = get_topk_predictions(
-        resnet_model,
-        img_tensor,
-        k=3
-    )
+    if analyze_button:
+        with st.spinner("Analyzing image with ResNet-18 and ViT-B/16..."):
 
-    vit_results = get_topk_predictions(
-        vit_model,
-        img_tensor,
-        k=3
-    )
+            img_tensor = transform(image)
+            img_tensor = img_tensor.unsqueeze(0)
 
-    resnet_best = resnet_results[0]
-    vit_best = vit_results[0]
+            resnet_results = get_topk_predictions(
+                resnet_model,
+                img_tensor,
+                k=3
+            )
 
-    st.success("Prediction Complete")
+            vit_results = get_topk_predictions(
+                vit_model,
+                img_tensor,
+                k=3
+            )
 
-    st.subheader("Model Comparison")
+        resnet_best = resnet_results[0]
+        vit_best = vit_results[0]
 
-    col1, col2 = st.columns(2)
+        st.success("Prediction Complete")
 
-    with col1:
-        st.markdown("### ResNet-18")
-        st.write(f"**Predicted Plant:** {resnet_best['plant']}")
-        st.write(f"**Predicted Disease:** {resnet_best['disease']}")
-        st.write(f"**Confidence:** {resnet_best['confidence']:.2f}%")
+        st.subheader("Model Comparison")
 
-    with col2:
-        st.markdown("### ViT-B/16")
-        st.write(f"**Predicted Plant:** {vit_best['plant']}")
-        st.write(f"**Predicted Disease:** {vit_best['disease']}")
-        st.write(f"**Confidence:** {vit_best['confidence']:.2f}%")
+        col1, col2 = st.columns(2)
 
-    if resnet_best["label"] == vit_best["label"]:
-        st.success("Both models agree on the same prediction.")
-    else:
-        st.warning("The two models disagree. Review the Top-3 predictions below.")
+        with col1:
+            st.markdown("### ResNet-18")
+            st.write(f"**Predicted Plant:** {resnet_best['plant']}")
+            st.write(f"**Predicted Disease:** {resnet_best['disease']}")
+            st.write(f"**Confidence:** {resnet_best['confidence']:.2f}%")
 
-    if resnet_best["confidence"] < 80 and vit_best["confidence"] < 80:
-        st.warning(
-            "Both models have low confidence. This image may belong to an unsupported plant "
-            "or disease class."
-        )
+        with col2:
+            st.markdown("### ViT-B/16")
+            st.write(f"**Predicted Plant:** {vit_best['plant']}")
+            st.write(f"**Predicted Disease:** {vit_best['disease']}")
+            st.write(f"**Confidence:** {vit_best['confidence']:.2f}%")
 
-    st.subheader("ResNet-18 Top-3 Predictions")
+        if resnet_best["label"] == vit_best["label"]:
+            st.success("Both models agree on the same prediction.")
+        else:
+            st.warning("The two models disagree. Review the Top-3 predictions below.")
 
-    for result in resnet_results:
-        st.write(
-            f"**Plant:** {result['plant']} | "
-            f"**Disease:** {result['disease']} | "
-            f"**Confidence:** {result['confidence']:.2f}%"
-        )
+        if resnet_best["confidence"] < 80 and vit_best["confidence"] < 80:
+            st.warning(
+                "Both models have low confidence. This image may belong to an unsupported plant "
+                "or disease class."
+            )
 
-    st.subheader("ViT-B/16 Top-3 Predictions")
+        st.subheader("ResNet-18 Top-3 Predictions")
 
-    for result in vit_results:
-        st.write(
-            f"**Plant:** {result['plant']} | "
-            f"**Disease:** {result['disease']} | "
-            f"**Confidence:** {result['confidence']:.2f}%"
-        )
+        for result in resnet_results:
+            st.write(
+                f"**Plant:** {result['plant']} | "
+                f"**Disease:** {result['disease']} | "
+                f"**Confidence:** {result['confidence']:.2f}%"
+            )
+
+        st.subheader("ViT-B/16 Top-3 Predictions")
+
+        for result in vit_results:
+            st.write(
+                f"**Plant:** {result['plant']} | "
+                f"**Disease:** {result['disease']} | "
+                f"**Confidence:** {result['confidence']:.2f}%"
+            )
