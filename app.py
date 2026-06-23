@@ -36,6 +36,10 @@ CLASS_NAMES = [
 ]
 
 
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
+
+
 def clean_label(label):
     if "Pepper" in label:
         plant = "Pepper"
@@ -145,7 +149,8 @@ st.info("Supported plants: Tomato, Potato, and Pepper.")
 
 uploaded_file = st.file_uploader(
     "Choose a leaf image",
-    type=["jpg", "jpeg", "png"]
+    type=["jpg", "jpeg", "png"],
+    key=f"uploader_{st.session_state.uploader_key}"
 )
 
 if uploaded_file is not None:
@@ -226,3 +231,7 @@ if uploaded_file is not None:
                 f"**Disease:** {result['disease']} | "
                 f"**Confidence:** {result['confidence']:.2f}%"
             )
+
+        if st.button("🔄 Reset / Upload Another Image"):
+            st.session_state.uploader_key += 1
+            st.rerun()
