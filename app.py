@@ -162,7 +162,17 @@ if uploaded_file is not None:
         use_container_width=True
     )
 
-    analyze_button = st.button("🔍 Analyze Image")
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        analyze_button = st.button("🔍 Analyze Image")
+
+    with col_b:
+        reset_button = st.button("🔄 Reset / Upload Another Image")
+
+    if reset_button:
+        st.session_state.uploader_key += 1
+        st.rerun()
 
     if analyze_button:
         with st.spinner("Analyzing image with ResNet-18 and ViT-B/16..."):
@@ -231,7 +241,3 @@ if uploaded_file is not None:
                 f"**Disease:** {result['disease']} | "
                 f"**Confidence:** {result['confidence']:.2f}%"
             )
-
-        if st.button("🔄 Reset / Upload Another Image"):
-            st.session_state.uploader_key += 1
-            st.rerun()
